@@ -68,10 +68,8 @@ if st.button("Predict", type="primary"):
 
     # 2. 风险等级预测（使用真实模型预测）
     pred_proba = model.predict_proba(input_data)[0][1]
-    if pred_proba < 0.5:
+    if pred_proba < 0.613:
         risk = "Low Risk (No Encephalitis)"
-    elif 0.5 <= pred_proba <= 0.8:
-        risk = "Medium Risk (Potential Encephalitis)"
     else:
         risk = "High Risk (Varicella Encephalitis)"
 
@@ -152,3 +150,4 @@ if st.button("Predict", type="primary"):
     )
 
     st.components.v1.html(force_plot.html(), height=150)
+
