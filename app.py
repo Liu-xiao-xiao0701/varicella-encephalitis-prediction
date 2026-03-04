@@ -49,16 +49,6 @@ input_data = pd.DataFrame(
     [[fever, rash, vomit, headache, n_pct, glu]],
     columns=FEATURE_NAMES
 )
-# 对数值型特征进行Min-Max归一化（0-1）
-for feat in FEATURE_NAMES:
-    if feat in NORMALIZE_CONFIG:
-        max_val = NORMALIZE_CONFIG[feat]['max']
-        min_val = NORMALIZE_CONFIG[feat]['min']
-        # 避免除以0（边界处理）
-        if max_val - min_val != 0:
-            input_data[feat] = (input_data[feat] - min_val) / (max_val - min_val)
-        else:
-            input_data[feat] = 0.0  # 若最大值=最小值，归一为0
 
 # --------------------------
 # 核心逻辑（使用真实模型，无冗余代码）
@@ -160,5 +150,6 @@ if st.button("Predict", type="primary"):
     )
 
     st.components.v1.html(force_plot.html(), height=150)
+
 
 
