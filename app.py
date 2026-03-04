@@ -12,7 +12,7 @@ import joblib  # 提前导入，避免重复导入
 FEATURE_NUM = 6  # 固定6个特征，强制对齐
 FEATURE_NAMES = ['Thermal duration', 'Rash duration', 'Vomit', 'Headache', 'N', 'Glu']
 # 模型绝对路径（避免相对路径错误）
-MODEL_PATH = r"C:\Users\Xiao\Desktop\model_web\rf_model.pkl"
+MODEL_PATH = "rf_model.pkl"  # 相对路径，云端/本地都兼容
 
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
@@ -150,4 +150,5 @@ if st.button("Predict", type="primary"):
         matplotlib=False,
         show=False
     )
+
     st.components.v1.html(force_plot.html(), height=150)
