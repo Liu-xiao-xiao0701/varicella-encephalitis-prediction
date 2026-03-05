@@ -3,87 +3,93 @@ import pandas as pd
 import numpy as np
 import shap
 import matplotlib.pyplot as plt
-from sklearn.ensemble import RandomForestClassifier
-import joblib  # 提前导入，避免重复导入
+import joblib
 
-# --------------------------
-# 全局配置（固定特征数，核心兜底）
-# --------------------------
-FEATURE_NUM = 6  # 固定6个特征，强制对齐
+# ===================== 全局配置 =====================
+FEATURE_NUM = 6
 FEATURE_NAMES = ['Thermal duration', 'Rash duration', 'Vomit', 'Headache', 'N', 'Glu']
-# 模型绝对路径（避免相对路径错误）
-MODEL_PATH = "rf_model.pkl"  # 相对路径，云端/本地都兼容
+MODEL_PATH    = "rf_model.pkl"
+SCALER_PATH   = "scaler.pkl"
 
+# 中文显示配置
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
-st.set_page_config(
-    page_title="Varicella Encephalitis Prediction",
-    page_icon="🏥",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Encephalitis Prediction", page_icon="🏥", layout="wide")
 
-# --------------------------
-# 侧边栏
-# --------------------------
-with st.sidebar:
-    st.title("About")
-    st.info("Pediatric Varicella Encephalitis Risk Prediction with SHAP")
-
-# --------------------------
-# 输入区域（严格对应6个特征）
-# --------------------------
-st.title("Pediatric Varicella Encephalitis Risk Prediction")
+# ===================== 输入界面 =====================
+st.title("Pediatric Varicella Encephalitis Prediction")
 col1, col2 = st.columns(2)
-with col1:
-    fever = st.number_input("Fever duration (d)", 0, 20, 5)
-    rash = st.number_input("Rash duration (d)", 0, 20, 5)
-    vomit = 1 if st.selectbox("Vomit", ["No", "Yes"]) == "Yes" else 0
-with col2:
-    headache = 1 if st.selectbox("Headache", ["No", "Yes"]) == "Yes" else 0
-    n_pct = st.number_input("N (%)", 0.0, 100.0, 50.0, 0.1)
-    glu = st.number_input("Glu (mmol/L)", 0.0, 20.0, 5.0, 0.1)
 
-# 构建输入数据（严格对应6列）
-input_data = pd.DataFrame(
+with col1:
+    fever     = st.number_input("Fever duration (d)", 0,20,5)
+    rash      = st.number_input("Rash duration (d)", 0,20,5)
+    vomit     = 1 if st.selectbox("Vomit", ["No","Yes"]) == "Yes" else 0
+
+with col2:
+    headache  = 1 if st.selectbox("Headache", ["No","Yes"]) == "Yes" else 0
+    n_pct     = st.number_input("N (%)", 0.0,100.0,50.0,0.1)
+    glu       = st.number_input("Glu (mmol/L)", 0.0,20.0,5.0,0.1)
+
+# 构建原始输入
+input_raw = pd.DataFrame(
     [[fever, rash, vomit, headache, n_pct, glu]],
     columns=FEATURE_NAMES
 )
 
-# --------------------------
-# 核心逻辑（使用真实模型，无冗余代码）
-# --------------------------
+# ===================== 预测 + SHAP分析 =====================
 if st.button("Predict", type="primary"):
-    # 1. 加载真实模型（核心修正：删除模拟数据训练）
+    # 1. 加载模型 + 归一化工具（删除成功提示）
     try:
-        model = joblib.load(MODEL_PATH)
-        st.success("✅")
-    except FileNotFoundError:
-        st.error(f"❌ 未找到模型文件：{MODEL_PATH}")
-        st.error("请先运行 train_model.py 生成 rf_model.pkl")
-        st.stop()  # 终止后续代码运行
+        model  = joblib.load(MODEL_PATH)
+        scaler = joblib.load(SCALER_PATH)
+        # 这里删除了 st.success 提示
+    except FileNotFoundError as e:
+        st.error(f"❌ 未找到文件：{e.filename}")
+        st.error("请先运行 train_model.py 生成模型和scaler文件")
+        st.stop()
     except Exception as e:
-        st.error(f"❌ 模型加载失败：{str(e)}")
+        st.error(f"❌ 加载失败：{str(e)}")
         st.stop()
 
-    # 2. 风险等级预测（使用真实模型预测）
-    pred_proba = model.predict_proba(input_data)[0][1]
-    if pred_proba < 0.613:
-        risk = "Low Risk (No Encephalitis)"
+    # 2. 自动归一化
+    input_scaled = scaler.transform(input_raw)
+
+    # 3. 预测概率
+    prob = model.predict_proba(input_scaled)[0][1]
+
+    # 4. 风险等级判断
+    if prob < 0.613:
+        risk = "Low Risk"
+        risk_color = "#155724"
+        risk_bg = "#d4edda"
     else:
-        risk = "High Risk (Varicella Encephalitis)"
+        risk = "High Risk"
+        risk_color = "#721c24"
+        risk_bg = "#f8d7da"
 
-    st.subheader("Prediction Result")
-    st.metric("Encephalitis Probability", f"{pred_proba:.4f}")
-    st.write(f"Risk Level: **{risk}**")
+    # 5. 显示结果：先显示概率，再显示风险等级色块
+    st.subheader("Result")
+    st.metric("Encephalitis Probability", f"{prob:.4f}")
+    # 风险等级放在概率下方
+    st.markdown(f"""
+    <div style="background-color: {risk_bg}; color: {risk_color}; padding: 10px; border-radius: 5px; font-size: 20px; font-weight: bold; margin-top: 10px;">
+    Risk Level: {risk}
+    </div>
+    """, unsafe_allow_html=True)
 
-    # 3. SHAP分析（保持原有逻辑，兼容真实模型）
+    # 6. SHAP分析（彻底解决重叠问题）
     st.subheader("SHAP Feature Contribution Analysis")
     explainer = shap.TreeExplainer(model)
-    shap_vals = explainer.shap_values(input_data)
+    shap_vals = explainer.shap_values(input_scaled)
     shap_arr = np.array(shap_vals)
 
-    # 强制降维并对齐6维
+    # 处理二分类SHAP值
+    if shap_arr.ndim == 3 and shap_arr.shape[0] == 2:
+        shap_arr = shap_arr[1]
+    elif shap_arr.ndim > 2:
+        shap_arr = shap_arr.squeeze()
+
+    # 强制对齐6维特征
     shap_flat = shap_arr.ravel()
     if len(shap_flat) > FEATURE_NUM:
         shap_final = shap_flat[:FEATURE_NUM]
@@ -92,64 +98,63 @@ if st.button("Predict", type="primary"):
     else:
         shap_final = shap_flat
 
-    # 绘制SHAP条形图
+    # 构建SHAP数据框
     shap_df = pd.DataFrame({
         "Feature": FEATURE_NAMES,
         "SHAP_Value": shap_final
     }).sort_values(by="SHAP_Value", ascending=False)
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    colors = ["#E83A8F" if val > 0 else "#66CCFF" for val in shap_df["SHAP_Value"]]
-    text_colors = ["#E83A8F" if val > 0 else "#0066CC" for val in shap_df["SHAP_Value"]]
-    bars = ax.barh(
-        y=range(len(shap_df)),
-        width=shap_df["SHAP_Value"],
-        color=colors,
-        edgecolor="white",
-        linewidth=1
+# 绘制SHAP条形图（终极版：确保所有数值清晰显示）
+fig, ax = plt.subplots(figsize=(12, 6))
+
+# 优化条形颜色：加深蓝色，让白色文字更醒目
+colors = ["#E83A8F" if val > 0 else "#3399FF" for val in shap_df["SHAP_Value"]]
+text_colors = ["#FFFFFF" for _ in shap_df["SHAP_Value"]]  # 全部白色文字
+
+bars = ax.barh(
+    y=range(len(shap_df)),
+    width=shap_df["SHAP_Value"],
+    color=colors,
+    edgecolor="white",
+    linewidth=1
+)
+
+# 基础样式
+ax.invert_yaxis()
+ax.set_yticks(range(len(shap_df)))
+ax.set_yticklabels(shap_df["Feature"], fontsize=14)
+ax.set_xlabel("mean (SHAP value)", fontsize=14)
+ax.set_title("Feature Contributions to Encephalitis Prediction", fontsize=16)
+ax.axvline(x=0, color="black", linestyle="--", alpha=0.5)
+
+# 核心标注逻辑：
+# 1. 计算每个条形的中心位置，把数值放在正中间
+# 2. 加粗文字，增大字号，确保在深色背景下清晰
+for i, bar in enumerate(bars):
+    val = bar.get_width()
+    # 计算条形的中心x坐标
+    bar_center_x = bar.get_x() + bar.get_width() / 2
+    bar_center_y = bar.get_y() + bar.get_height() / 2
+    
+    sign = "+" if val > 0 else "-"
+    label_text = f"{sign}{abs(val):.3f}"
+    
+    # 标注在条形正中心，白色加粗，字号12
+    ax.text(
+        bar_center_x,
+        bar_center_y,
+        label_text,
+        va="center",
+        ha="center",
+        color="#FFFFFF",
+        fontweight="bold",
+        fontsize=12,
     )
 
-    # 样式调整
-    ax.invert_yaxis()
-    ax.set_yticks(range(len(shap_df)))
-    ax.set_yticklabels(shap_df["Feature"], fontsize=12)
-    ax.set_xlabel("mean (SHAP value)", fontsize=12)
-    ax.set_title("Feature Contributions to Encephalitis Prediction", fontsize=14)
-    ax.axvline(x=0, color="black", linestyle="--", alpha=0.5)
+# 自动适配x轴范围
+left_limit = min(shap_final) - 0.02
+right_limit = max(shap_final) + 0.02
+ax.set_xlim(left=left_limit, right=right_limit)
 
-    # 数值标注（避免遮盖）
-    for i, bar in enumerate(bars):
-        val = bar.get_width()
-        x_pos = val + 0.005 if val > 0 else val - 0.03
-        sign = "+" if val > 0 else "-"
-        ax.text(
-            x_pos,
-            bar.get_y() + bar.get_height()/2,
-            f"{sign}{abs(val):.3f}",
-            va="center",
-            color=text_colors[i],
-            fontweight="bold",
-            fontsize=11
-        )
-
-    plt.tight_layout()
-    st.pyplot(fig)
-
-    # SHAP Force Plot
-    st.markdown("**SHAP Force Plot**")
-    base_value = explainer.expected_value
-    if isinstance(base_value, (list, np.ndarray)):
-        base_value = base_value[0] if len(base_value) > 0 else 0.0
-
-    force_plot = shap.force_plot(
-        base_value,
-        shap_final,
-        feature_names=FEATURE_NAMES,
-        matplotlib=False,
-        show=False
-    )
-
-    st.components.v1.html(force_plot.html(), height=150)
-
-
-
+plt.tight_layout()
+st.pyplot(fig)
